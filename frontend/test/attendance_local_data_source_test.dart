@@ -8,7 +8,6 @@ import 'package:frontend/features/attendance/domain/attendance_event.dart';
 
 void main() {
   late AppDatabase appDatabase;
-  late AttendanceLocalDataSource dataSource;
 
   setUpAll(() {
     sqfliteFfiInit();
@@ -17,7 +16,6 @@ void main() {
 
   setUp(() async {
     appDatabase = AppDatabase();
-    dataSource = AttendanceLocalDataSource(appDatabase);
 
     // The production database wrapper uses the normal platform factory.
     // The test needs an in-memory database instead, so use the test

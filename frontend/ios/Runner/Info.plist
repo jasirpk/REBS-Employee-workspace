@@ -6,6 +6,8 @@
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+    <string>Your location is used to verify that attendance actions are performed within the office geofence.</string>
 	<key>CFBundleDisplayName</key>
 	<string>Frontend</string>
 	<key>CFBundleExecutable</key>
