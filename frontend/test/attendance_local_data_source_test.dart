@@ -39,7 +39,6 @@ void main() {
       longitude: 77.5946,
       accuracyMeters: 10,
     );
-
     final restored = AttendanceEvent.fromMap({
       ...original.toMap(),
       'local_id': 1,
