@@ -165,4 +165,70 @@ void main() {
       expect(events[1].status, AttendanceSyncStatus.synced);
     });
   });
+
+  group('getRecentEvents', () {
+    AttendanceEvent historyEvent(
+      String eventId,
+      DateTime occurredAt, {
+      AttendanceEventType type = AttendanceEventType.checkIn,
+      AttendanceSyncStatus status = AttendanceSyncStatus.synced,
+    }) {
+      return AttendanceEvent(
+        eventId: eventId,
+        employeeId: 'EMP001',
+        type: type,
+        occurredAt: occurredAt,
+        companyDate: occurredAt.toIso8601String().substring(0, 10),
+        latitude: 11.190723,
+        longitude: 75.950761,
+        accuracyMeters: 10,
+        status: status,
+      );
+    }
+
+    test('returns the five newest events across dates, newest first', () async {
+      // Saved out of order to prove the query sorts by time, not insert order.
+      await localDataSource.saveEvent(historyEvent('day-24-in', DateTime.utc(2026, 10, 24, 4)));
+      await localDataSource.saveEvent(historyEvent('day-28-out', DateTime.utc(2026, 10, 28, 12), type: AttendanceEventType.checkOut));
+      await localDataSource.saveEvent(historyEvent('day-25-in', DateTime.utc(2026, 10, 25, 4)));
+      await localDataSource.saveEvent(historyEvent('day-28-in', DateTime.utc(2026, 10, 28, 4)));
+      await localDataSource.saveEvent(historyEvent('day-26-in', DateTime.utc(2026, 10, 26, 4)));
+      await localDataSource.saveEvent(historyEvent('day-27-in', DateTime.utc(2026, 10, 27, 4)));
+
+      final recent = await localDataSource.getRecentEvents();
+
+      expect(recent.map((event) => event.eventId), ['day-28-out', 'day-28-in', 'day-27-in', 'day-26-in', 'day-25-in']);
+      expect(recent.map((event) => event.companyDate).toSet(), hasLength(4));
+    });
+
+    test('includes pending and rejected events', () async {
+      await localDataSource.saveEvent(historyEvent('synced', DateTime.utc(2026, 10, 27, 4)));
+      await localDataSource.saveEvent(historyEvent('rejected', DateTime.utc(2026, 10, 28, 4), status: AttendanceSyncStatus.rejected));
+      await localDataSource.saveEvent(
+        historyEvent('pending', DateTime.utc(2026, 10, 28, 12), type: AttendanceEventType.checkOut, status: AttendanceSyncStatus.pending),
+      );
+
+      final recent = await localDataSource.getRecentEvents();
+
+      expect(recent.map((event) => event.status), [
+        AttendanceSyncStatus.pending,
+        AttendanceSyncStatus.rejected,
+        AttendanceSyncStatus.synced,
+      ]);
+    });
+
+    test('orders events with the same time by the newest local row first', () async {
+      final sameTime = DateTime.utc(2026, 10, 28, 4);
+      await localDataSource.saveEvent(historyEvent('first-saved', sameTime, status: AttendanceSyncStatus.rejected));
+      await localDataSource.saveEvent(historyEvent('second-saved', sameTime));
+
+      final recent = await localDataSource.getRecentEvents();
+
+      expect(recent.map((event) => event.eventId), ['second-saved', 'first-saved']);
+    });
+
+    test('returns an empty list when there is no history', () async {
+      expect(await localDataSource.getRecentEvents(), isEmpty);
+    });
+  });
 }

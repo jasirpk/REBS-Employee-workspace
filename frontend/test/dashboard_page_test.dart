@@ -141,10 +141,13 @@ void main() {
 
     expect(find.text('Offline. Showing data saved on 28 Oct, 09:30 AM.'), findsOneWidget);
     expect(find.text('Alex Johnson'), findsOneWidget);
-    expect(find.text('5 days available'), findsOneWidget);
 
     final checkIn = tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Check In'));
     expect(checkIn.onPressed, isNotNull);
+
+    // The balance sits below the Recent Attendance section, off the test screen.
+    await tester.scrollUntilVisible(find.text('5 days available'), 200, scrollable: find.byType(Scrollable).first);
+    expect(find.text('5 days available'), findsOneWidget);
 
     final leaveButton = find.text('Apply for Leave / View Requests');
     await tester.scrollUntilVisible(leaveButton, 200, scrollable: find.byType(Scrollable).first);
@@ -173,5 +176,68 @@ void main() {
 
     expect(find.text('Alex Johnson'), findsOneWidget);
     expect(find.textContaining('Offline.'), findsNothing);
+  });
+
+  group('recent attendance', () {
+    AttendanceEvent historyEvent(String eventId, AttendanceEventType type, String companyDate, AttendanceSyncStatus status) {
+      return AttendanceEvent(
+        eventId: eventId,
+        employeeId: 'EMP001',
+        type: type,
+        occurredAt: DateTime.parse('${companyDate}T04:00:00Z'),
+        companyDate: companyDate,
+        latitude: 11.190723,
+        longitude: 75.950761,
+        accuracyMeters: 10,
+        status: status,
+      );
+    }
+
+    Future<void> scrollToRecentAttendance(WidgetTester tester) {
+      return tester.scrollUntilVisible(find.text('Recent Attendance'), 200, scrollable: find.byType(Scrollable).first);
+    }
+
+    testWidgets('lists events with their type, date and sync status', (tester) async {
+      whenListen(
+        attendanceCubit,
+        const Stream<AttendanceState>.empty(),
+        initialState: AttendanceState(
+          recentEvents: [
+            historyEvent('out', AttendanceEventType.checkOut, '2026-10-28', AttendanceSyncStatus.pending),
+            historyEvent('in', AttendanceEventType.checkIn, '2026-10-28', AttendanceSyncStatus.synced),
+            historyEvent('rejected', AttendanceEventType.checkIn, '2026-10-27', AttendanceSyncStatus.rejected),
+          ],
+        ),
+      );
+      await pumpDashboard(tester, loadedState);
+      await scrollToRecentAttendance(tester);
+      await tester.scrollUntilVisible(find.text('Rejected'), 100, scrollable: find.byType(Scrollable).first);
+
+      final history = find.ancestor(of: find.text('Pending Sync'), matching: find.byType(Card));
+      expect(find.descendant(of: history, matching: find.text('Check Out')), findsOneWidget);
+      expect(find.descendant(of: history, matching: find.text('Check In')), findsNWidgets(2));
+      expect(find.descendant(of: history, matching: find.textContaining('Wed, 28 Oct 2026 · ')), findsNWidgets(2));
+      expect(find.descendant(of: history, matching: find.textContaining('Tue, 27 Oct 2026 · ')), findsOneWidget);
+      expect(find.text('Synced'), findsOneWidget);
+      expect(find.text('Pending Sync'), findsOneWidget);
+      expect(find.text('Rejected'), findsOneWidget);
+    });
+
+    testWidgets('shows an empty state when there is no history', (tester) async {
+      await pumpDashboard(tester, loadedState);
+      await scrollToRecentAttendance(tester);
+      await tester.scrollUntilVisible(find.textContaining('No attendance records yet.'), 100, scrollable: find.byType(Scrollable).first);
+
+      expect(find.textContaining('No attendance records yet.'), findsOneWidget);
+    });
+
+    testWidgets('shows a loading message while the first history is loading', (tester) async {
+      whenListen(attendanceCubit, const Stream<AttendanceState>.empty(), initialState: const AttendanceState(isLoading: true));
+      await pumpDashboard(tester, loadedState);
+      await scrollToRecentAttendance(tester);
+      await tester.scrollUntilVisible(find.text('Loading attendance history…'), 100, scrollable: find.byType(Scrollable).first);
+
+      expect(find.text('Loading attendance history…'), findsOneWidget);
+    });
   });
 }

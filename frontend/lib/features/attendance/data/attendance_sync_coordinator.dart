@@ -12,6 +12,7 @@ class AttendanceSyncCoordinator {
 
   // In-flight pulls by company date, so overlapping calls share one GET.
   final Map<String, Future<void>> _pullsInFlight = {};
+  final Map<String, Future<void>> _historyPullsInFlight = {};
 
   static final RegExp _companyDatePattern = RegExp(r'^\d{4}-\d{2}-\d{2}$');
 
@@ -31,12 +32,44 @@ class AttendanceSyncCoordinator {
   }
 
   Future<void> _pullEventsForDate(String companyDate) async {
+    _checkCompanyDate(companyDate);
+
+    final serverEvents = await _fetchMonth(companyDate.substring(0, 7));
+
+    await _localDataSource.importSyncedEvents(serverEvents.where((event) => event.companyDate == companyDate).toList());
+  }
+
+  // Imports recent accepted events of every date for the dashboard history:
+  // the month of [companyDate], plus the previous month when the current one
+  // returns fewer than [minimumRecords]. Today's events are included.
+  Future<void> pullRecentHistory(String companyDate, {int minimumRecords = 5}) {
+    return _historyPullsInFlight[companyDate] ??= _pullRecentHistory(companyDate, minimumRecords).whenComplete(() {
+      _historyPullsInFlight.remove(companyDate);
+    });
+  }
+
+  Future<void> _pullRecentHistory(String companyDate, int minimumRecords) async {
+    _checkCompanyDate(companyDate);
+
+    final month = companyDate.substring(0, 7);
+    final currentMonthEvents = await _fetchMonth(month);
+    await _localDataSource.importSyncedEvents(currentMonthEvents);
+
+    if (currentMonthEvents.length >= minimumRecords) return;
+
+    await _localDataSource.importSyncedEvents(await _fetchMonth(_previousMonth(month)));
+  }
+
+  void _checkCompanyDate(String companyDate) {
     if (!_companyDatePattern.hasMatch(companyDate)) {
       throw ArgumentError.value(companyDate, 'companyDate', 'must use YYYY-MM-DD format');
     }
+  }
 
-    final month = companyDate.substring(0, 7);
-
+  // GET attendance?month=YYYY-MM. Every record is validated before anything
+  // is returned, so a malformed response fails visibly instead of importing
+  // a partial result.
+  Future<List<AttendanceEvent>> _fetchMonth(String month) async {
     final response = await _apiClient.dio.get<Object?>('attendance', queryParameters: {'month': month});
 
     final data = response.data;
@@ -45,11 +78,15 @@ class AttendanceSyncCoordinator {
       throw const FormatException('Attendance history response is malformed.');
     }
 
-    // Validate every record before filtering so a malformed response fails
-    // visibly instead of importing a partial result.
-    final serverEvents = (data['records'] as List).map(_eventFromServerRecord).toList();
+    return (data['records'] as List).map(_eventFromServerRecord).toList();
+  }
 
-    await _localDataSource.importSyncedEvents(serverEvents.where((event) => event.companyDate == companyDate).toList());
+  // '2026-01' -> '2025-12'
+  String _previousMonth(String month) {
+    final year = int.parse(month.substring(0, 4));
+    final monthNumber = int.parse(month.substring(5, 7));
+
+    return monthNumber == 1 ? '${year - 1}-12' : '$year-${(monthNumber - 1).toString().padLeft(2, '0')}';
   }
 
   AttendanceEvent _eventFromServerRecord(Object? record) {

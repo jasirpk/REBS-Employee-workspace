@@ -59,23 +59,40 @@ class AttendanceCubit extends Cubit<AttendanceState> {
 
     try {
       final events = await _localDataSource.getEventsForDate(companyDate);
+      final recentEvents = await _localDataSource.getRecentEvents();
 
       // Show local events immediately; stay loading while the server
       // history is pulled so a check-in cannot race the import.
-      emit(state.copyWith(events: events));
+      emit(state.copyWith(events: events, recentEvents: recentEvents));
     } catch (_) {
       emit(state.copyWith(isLoading: false, message: 'Could not load local attendance.', messageIsError: true));
       return;
     }
 
     try {
-      await _syncCoordinator.pullEventsForDate(companyDate);
-      final events = await _localDataSource.getEventsForDate(companyDate);
-
-      emit(state.copyWith(events: events, isLoading: false));
+      // One pull covers today's events and the recent history.
+      await _syncCoordinator.pullRecentHistory(companyDate);
     } catch (_) {
       // Offline, HTTP error or malformed server data: keep the local events.
+      // Part of the history may still have been imported, so reload below.
+    }
+
+    try {
+      final events = await _localDataSource.getEventsForDate(companyDate);
+      final recentEvents = await _localDataSource.getRecentEvents();
+
+      emit(state.copyWith(events: events, recentEvents: recentEvents, isLoading: false));
+    } catch (_) {
       emit(state.copyWith(isLoading: false));
+    }
+  }
+
+  // Keeps the last known history if SQLite cannot be read.
+  Future<List<AttendanceEvent>> _recentEventsOrCurrent() async {
+    try {
+      return await _localDataSource.getRecentEvents();
+    } catch (_) {
+      return state.recentEvents;
     }
   }
 
@@ -117,7 +134,7 @@ class AttendanceCubit extends Cubit<AttendanceState> {
         _ => ('Saved on this device. Sync is pending; try again when connected.', false),
       };
 
-      emit(state.copyWith(events: events, isActionInProgress: false, message: message, messageIsError: isError));
+      emit(state.copyWith(events: events, recentEvents: await _recentEventsOrCurrent(), isActionInProgress: false, message: message, messageIsError: isError));
     } catch (error) {
       // Reload because the event may already exist even if a later step failed.
       List<AttendanceEvent> events = state.events;
@@ -127,7 +144,7 @@ class AttendanceCubit extends Cubit<AttendanceState> {
         // Preserve the last known list if SQLite cannot be read.
       }
 
-      emit(state.copyWith(events: events, isActionInProgress: false, message: error.toString(), messageIsError: true));
+      emit(state.copyWith(events: events, recentEvents: await _recentEventsOrCurrent(), isActionInProgress: false, message: error.toString(), messageIsError: true));
     }
   }
 
@@ -184,7 +201,7 @@ class AttendanceCubit extends Cubit<AttendanceState> {
 
       if (isAutomatic && hasPending && !hasRejected) {
         // Still offline or the server is busy; the pending banner stays visible.
-        emit(state.copyWith(events: events, isActionInProgress: false));
+        emit(state.copyWith(events: events, recentEvents: await _recentEventsOrCurrent(), isActionInProgress: false));
         return;
       }
 
@@ -194,7 +211,7 @@ class AttendanceCubit extends Cubit<AttendanceState> {
           ? ('Some attendance events are still pending sync; try again when connected.', false)
           : ('Attendance sync completed.', false);
 
-      emit(state.copyWith(events: events, isActionInProgress: false, message: message, messageIsError: isError));
+      emit(state.copyWith(events: events, recentEvents: await _recentEventsOrCurrent(), isActionInProgress: false, message: message, messageIsError: isError));
     } catch (_) {
       // Network errors leave events PENDING; nothing is deleted or resent here.
       List<AttendanceEvent> events = state.events;
@@ -205,13 +222,14 @@ class AttendanceCubit extends Cubit<AttendanceState> {
       }
 
       if (isAutomatic) {
-        emit(state.copyWith(events: events, isActionInProgress: false));
+        emit(state.copyWith(events: events, recentEvents: await _recentEventsOrCurrent(), isActionInProgress: false));
         return;
       }
 
       emit(
         state.copyWith(
           events: events,
+          recentEvents: await _recentEventsOrCurrent(),
           isActionInProgress: false,
           message: 'Sync failed. Your pending events remain saved locally.',
           messageIsError: true,

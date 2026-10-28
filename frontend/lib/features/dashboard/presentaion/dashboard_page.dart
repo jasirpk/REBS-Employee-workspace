@@ -6,6 +6,7 @@ import '../../attendance/domain/attendance_event.dart';
 import '../../attendance/domain/office_location.dart';
 import '../../attendance/presentation/attendance_cubit.dart';
 import '../../attendance/presentation/attendance_state.dart';
+import '../../attendance/presentation/worked_duration_text.dart';
 import '../../leave/presentation/leave_cubit.dart';
 import '../../leave/presentation/leave_page.dart';
 import '../domain/employee.dart';
@@ -165,6 +166,10 @@ class _DashboardContent extends StatelessWidget {
           const SizedBox(height: 8),
           _AttendanceCard(employee: employee),
           const SizedBox(height: 20),
+          Text('Recent Attendance', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 8),
+          const _RecentAttendance(),
+          const SizedBox(height: 20),
           Text('Leave Balance', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 8),
           Row(
@@ -265,6 +270,7 @@ class _AttendanceCard extends StatelessWidget {
                 const SizedBox(height: 12),
                 Text('Check-in: ${_formatTime(checkIns.firstOrNull?.occurredAt)}'),
                 Text('Check-out: ${_formatTime(checkOuts.firstOrNull?.occurredAt)}'),
+                WorkedDurationText(checkIn: checkIns.firstOrNull?.occurredAt, checkOut: checkOuts.firstOrNull?.occurredAt),
                 const SizedBox(height: 16),
                 if (state.message != null) ...[
                   Text(
@@ -338,6 +344,92 @@ class _AttendanceCard extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+// The latest attendance events across all dates, read from SQLite so they
+// stay visible offline.
+class _RecentAttendance extends StatelessWidget {
+  const _RecentAttendance();
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<AttendanceCubit, AttendanceState>(
+      builder: (context, state) {
+        if (state.recentEvents.isEmpty) {
+          return Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  const Icon(Icons.history),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      state.isLoading
+                          ? 'Loading attendance history…'
+                          : 'No attendance records yet. Your check-ins and check-outs will appear here.',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return Card(
+          child: Column(
+            children: [
+              for (final event in state.recentEvents) _RecentAttendanceRow(event: event),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _RecentAttendanceRow extends StatelessWidget {
+  final AttendanceEvent event;
+
+  const _RecentAttendanceRow({required this.event});
+
+  @override
+  Widget build(BuildContext context) {
+    final isCheckIn = event.type == AttendanceEventType.checkIn;
+    final date = DateFormat('EEE, d MMM yyyy').format(DateTime.parse(event.companyDate));
+    final time = DateFormat('hh:mm a').format(event.occurredAt.toLocal());
+
+    return ListTile(
+      leading: Icon(isCheckIn ? Icons.login : Icons.logout),
+      title: Text(isCheckIn ? 'Check In' : 'Check Out'),
+      subtitle: Text('$date · $time'),
+      trailing: _SyncStatusLabel(status: event.status),
+    );
+  }
+}
+
+class _SyncStatusLabel extends StatelessWidget {
+  final AttendanceSyncStatus status;
+
+  const _SyncStatusLabel({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, color) = switch (status) {
+      AttendanceSyncStatus.synced => ('Synced', Colors.green.shade700),
+      AttendanceSyncStatus.pending => ('Pending Sync', Colors.orange.shade800),
+      AttendanceSyncStatus.rejected => ('Rejected', Theme.of(context).colorScheme.error),
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
     );
   }
 }

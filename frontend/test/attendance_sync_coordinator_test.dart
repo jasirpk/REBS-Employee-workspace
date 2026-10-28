@@ -427,4 +427,133 @@ void main() {
       expect(await localDataSource.getAllEvents(), hasLength(1));
     });
   });
+
+  group('pullRecentHistory', () {
+    // Check-outs are recorded later in the day than check-ins.
+    Map<String, Object?> historyRecord(String eventId, String companyDate, {String type = 'CHECK_IN'}) {
+      return {
+        'id': 'ATT-$eventId',
+        'eventId': eventId,
+        'employeeId': 'EMP001',
+        'type': type,
+        'occurredAt': type == 'CHECK_IN' ? '${companyDate}T04:00:00.000Z' : '${companyDate}T12:00:00.000Z',
+        'companyDate': companyDate,
+        'latitude': 11.190723,
+        'longitude': 75.950761,
+        'status': 'SYNCED',
+      };
+    }
+
+    // Answers GET attendance?month=... from [months]; an unknown month fails
+    // like an offline request.
+    List<String> serveMonths(Map<String, List<Map<String, Object?>>> months) {
+      final requestedMonths = <String>[];
+
+      dio.interceptors.clear();
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            final month = options.queryParameters['month'] as String;
+            requestedMonths.add(month);
+
+            final records = months[month];
+            if (records == null) {
+              handler.reject(DioException(requestOptions: options, type: DioExceptionType.connectionError));
+              return;
+            }
+
+            handler.resolve(
+              Response(requestOptions: options, statusCode: 200, data: {'month': month, 'records': records}),
+            );
+          },
+        ),
+      );
+
+      return requestedMonths;
+    }
+
+    test('imports every date of the month and skips the previous month when there are five records', () async {
+      final requestedMonths = serveMonths({
+        '2026-10': [
+          historyRecord('oct-28-in', '2026-10-28'),
+          historyRecord('oct-27-out', '2026-10-27', type: 'CHECK_OUT'),
+          historyRecord('oct-27-in', '2026-10-27'),
+          historyRecord('oct-26-in', '2026-10-26'),
+          historyRecord('oct-25-in', '2026-10-25'),
+        ],
+      });
+
+      await coordinator.pullRecentHistory('2026-10-28');
+
+      expect(requestedMonths, ['2026-10']);
+      final events = await localDataSource.getAllEvents();
+      expect(events, hasLength(5));
+      expect(events.map((event) => event.companyDate).toSet(), hasLength(4));
+      expect(events.every((event) => event.status == AttendanceSyncStatus.synced), isTrue);
+    });
+
+    test('also imports the previous month when the current month has fewer than five records', () async {
+      final requestedMonths = serveMonths({
+        '2026-10': [historyRecord('oct-01-in', '2026-10-01')],
+        '2026-09': [
+          historyRecord('sep-30-out', '2026-09-30', type: 'CHECK_OUT'),
+          historyRecord('sep-30-in', '2026-09-30'),
+        ],
+      });
+
+      await coordinator.pullRecentHistory('2026-10-02');
+
+      expect(requestedMonths, ['2026-10', '2026-09']);
+      final recent = await localDataSource.getRecentEvents();
+      expect(recent.map((event) => event.eventId), ['oct-01-in', 'sep-30-out', 'sep-30-in']);
+    });
+
+    test('January falls back to December of the previous year', () async {
+      final requestedMonths = serveMonths({'2026-01': [], '2025-12': []});
+
+      await coordinator.pullRecentHistory('2026-01-05');
+
+      expect(requestedMonths, ['2026-01', '2025-12']);
+    });
+
+    test('repeated pulls do not duplicate events or change their identity', () async {
+      await localDataSource.saveEvent(
+        AttendanceEvent(
+          eventId: 'oct-28-in',
+          employeeId: 'EMP001',
+          type: AttendanceEventType.checkIn,
+          occurredAt: DateTime.utc(2026, 10, 28, 4),
+          companyDate: '2026-10-28',
+          latitude: 11.190723,
+          longitude: 75.950761,
+          accuracyMeters: 10,
+        ),
+      );
+      serveMonths({
+        '2026-10': [historyRecord('oct-28-in', '2026-10-28'), historyRecord('oct-27-in', '2026-10-27')],
+        '2026-09': [],
+      });
+
+      await coordinator.pullRecentHistory('2026-10-28');
+      await coordinator.pullRecentHistory('2026-10-28');
+
+      final events = await localDataSource.getAllEvents();
+      expect(events.map((event) => event.eventId), unorderedEquals(['oct-28-in', 'oct-27-in']));
+      // The local pending copy is confirmed by the server, not replaced.
+      final ownEvent = events.singleWhere((event) => event.eventId == 'oct-28-in');
+      expect(ownEvent.status, AttendanceSyncStatus.synced);
+      expect(ownEvent.accuracyMeters, 10);
+    });
+
+    test('a failed pull throws and keeps the cached history', () async {
+      serveMonths({'2026-10': [historyRecord('oct-27-in', '2026-10-27')], '2026-09': []});
+      await coordinator.pullRecentHistory('2026-10-28');
+
+      serveMonths({});
+      await expectLater(coordinator.pullRecentHistory('2026-10-28'), throwsA(isA<DioException>()));
+
+      final recent = await localDataSource.getRecentEvents();
+      expect(recent.single.eventId, 'oct-27-in');
+    });
+  });
 }

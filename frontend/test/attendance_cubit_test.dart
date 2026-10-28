@@ -75,6 +75,7 @@ void main() {
 
     // By default the server history is reachable but adds nothing.
     when(() => syncCoordinator.pullEventsForDate(any())).thenAnswer((_) async {});
+    when(() => syncCoordinator.pullRecentHistory(any())).thenAnswer((_) async {});
 
     cubit = AttendanceCubit(
       localDataSource: localDataSource,
@@ -196,7 +197,7 @@ void main() {
     test('shows local events and keeps them when the history pull fails', () async {
       await localDataSource.saveEvent(buildEvent('local-pending-001'));
       final pull = Completer<void>();
-      when(() => syncCoordinator.pullEventsForDate(any())).thenAnswer((_) => pull.future);
+      when(() => syncCoordinator.pullRecentHistory(any())).thenAnswer((_) => pull.future);
 
       final localStateShown = cubit.stream.firstWhere((state) => state.events.isNotEmpty);
       final load = cubit.loadToday();
@@ -218,11 +219,11 @@ void main() {
       expect(cubit.state.events.single.status, AttendanceSyncStatus.pending);
       expect(cubit.state.isLoading, isFalse);
       expect(cubit.state.message, isNull);
-      verify(() => syncCoordinator.pullEventsForDate(CompanyClock.today())).called(1);
+      verify(() => syncCoordinator.pullRecentHistory(CompanyClock.today())).called(1);
     });
 
     test('includes a server event after a successful pull', () async {
-      when(() => syncCoordinator.pullEventsForDate(any())).thenAnswer((_) async {
+      when(() => syncCoordinator.pullRecentHistory(any())).thenAnswer((_) async {
         await localDataSource.importSyncedEvents([buildEvent('android-001')]);
       });
 
@@ -235,7 +236,7 @@ void main() {
 
     test('overlapping calls share one history pull', () async {
       final pull = Completer<void>();
-      when(() => syncCoordinator.pullEventsForDate(any())).thenAnswer((_) => pull.future);
+      when(() => syncCoordinator.pullRecentHistory(any())).thenAnswer((_) => pull.future);
 
       final first = cubit.loadToday();
       final second = cubit.loadToday();
@@ -243,13 +244,75 @@ void main() {
       pull.complete();
       await Future.wait([first, second]);
 
-      verify(() => syncCoordinator.pullEventsForDate(any())).called(1);
+      verify(() => syncCoordinator.pullRecentHistory(any())).called(1);
       expect(cubit.state.isLoading, isFalse);
 
       // A later call pulls again.
       await cubit.loadToday();
 
-      verify(() => syncCoordinator.pullEventsForDate(any())).called(1);
+      verify(() => syncCoordinator.pullRecentHistory(any())).called(1);
+    });
+
+    test('keeps cached history from earlier dates when the pull fails', () async {
+      await localDataSource.saveEvent(
+        AttendanceEvent(
+          eventId: 'cached-yesterday',
+          employeeId: 'EMP001',
+          type: AttendanceEventType.checkOut,
+          occurredAt: DateTime.utc(2026, 10, 27, 12),
+          companyDate: '2026-10-27',
+          latitude: 11.190723,
+          longitude: 75.950761,
+          accuracyMeters: 10,
+          status: AttendanceSyncStatus.synced,
+        ),
+      );
+      await localDataSource.saveEvent(buildEvent('cached-today'));
+      when(() => syncCoordinator.pullRecentHistory(any())).thenThrow(
+        DioException(requestOptions: RequestOptions(path: 'attendance'), type: DioExceptionType.connectionError),
+      );
+
+      await cubit.loadToday();
+
+      expect(cubit.state.recentEvents.map((event) => event.eventId), ['cached-today', 'cached-yesterday']);
+      expect(cubit.state.events.single.eventId, 'cached-today');
+      expect(cubit.state.isLoading, isFalse);
+      expect(cubit.state.message, isNull);
+    });
+
+    test('shows history imported from earlier dates after a successful pull', () async {
+      when(() => syncCoordinator.pullRecentHistory(any())).thenAnswer((_) async {
+        await localDataSource.importSyncedEvents([
+          AttendanceEvent(
+            eventId: 'server-earlier-day',
+            employeeId: 'EMP001',
+            type: AttendanceEventType.checkIn,
+            occurredAt: DateTime.utc(2026, 10, 20, 4),
+            companyDate: '2026-10-20',
+            latitude: 11.190723,
+            longitude: 75.950761,
+            accuracyMeters: 0,
+          ),
+        ]);
+      });
+
+      await cubit.loadToday();
+
+      expect(cubit.state.recentEvents.single.eventId, 'server-earlier-day');
+      expect(cubit.state.events, isEmpty);
+    });
+
+    test('a new attendance action appears in the history straight away', () async {
+      final event = buildEvent('cubit-history-001');
+      stubRecordAttendanceSaves(event);
+      when(() => syncCoordinator.syncPendingEvents()).thenThrow(
+        DioException(requestOptions: RequestOptions(path: 'attendance/events'), type: DioExceptionType.connectionError),
+      );
+
+      await recordCheckIn();
+
+      expect(cubit.state.recentEvents.single.eventId, 'cubit-history-001');
+      expect(cubit.state.recentEvents.single.status, AttendanceSyncStatus.pending);
     });
   });
 
@@ -350,7 +413,7 @@ void main() {
 
       await autoSyncCubit.startAutoSync();
 
-      verify(() => syncCoordinator.pullEventsForDate(CompanyClock.today())).called(1);
+      verify(() => syncCoordinator.pullRecentHistory(CompanyClock.today())).called(1);
       verify(() => syncCoordinator.syncPendingEvents()).called(1);
       expect(autoSyncCubit.state.events.single.status, AttendanceSyncStatus.synced);
       expect(autoSyncCubit.state.message, 'Attendance sync completed.');

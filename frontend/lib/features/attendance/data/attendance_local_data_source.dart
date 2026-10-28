@@ -38,6 +38,20 @@ class AttendanceLocalDataSource {
     return rows.map(AttendanceEvent.fromMap).toList();
   }
 
+  // Newest first across all dates, including pending and rejected events.
+  // local_id breaks ties between events with the same timestamp.
+  Future<List<AttendanceEvent>> getRecentEvents({int limit = 5}) async {
+    final db = await _appDatabase.database;
+
+    final rows = await db.query(
+      'attendance_events',
+      orderBy: 'occurred_at DESC, local_id DESC',
+      limit: limit,
+    );
+
+    return rows.map(AttendanceEvent.fromMap).toList();
+  }
+
   Future<void> updateSyncStatus({required String eventId, required AttendanceSyncStatus status, String? rejectReason}) async {
     final db = await _appDatabase.database;
 

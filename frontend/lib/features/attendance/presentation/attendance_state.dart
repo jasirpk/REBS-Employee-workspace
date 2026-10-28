@@ -4,6 +4,8 @@ import '../domain/attendance_event.dart';
 
 class AttendanceState extends Equatable {
   final List<AttendanceEvent> events;
+  // The latest events across all dates, newest first, for the dashboard history.
+  final List<AttendanceEvent> recentEvents;
   final bool isLoading;
   final bool isActionInProgress;
   final String? message;
@@ -11,6 +13,7 @@ class AttendanceState extends Equatable {
 
   const AttendanceState({
     this.events = const [],
+    this.recentEvents = const [],
     this.isLoading = false,
     this.isActionInProgress = false,
     this.message,
@@ -19,6 +22,7 @@ class AttendanceState extends Equatable {
 
   AttendanceState copyWith({
     List<AttendanceEvent>? events,
+    List<AttendanceEvent>? recentEvents,
     bool? isLoading,
     bool? isActionInProgress,
     String? message,
@@ -27,6 +31,7 @@ class AttendanceState extends Equatable {
   }) {
     return AttendanceState(
       events: events ?? this.events,
+      recentEvents: recentEvents ?? this.recentEvents,
       isLoading: isLoading ?? this.isLoading,
       isActionInProgress:
       isActionInProgress ?? this.isActionInProgress,
@@ -38,6 +43,7 @@ class AttendanceState extends Equatable {
   @override
   List<Object?> get props => [
     events,
+    recentEvents,
     isLoading,
     isActionInProgress,
     message,
