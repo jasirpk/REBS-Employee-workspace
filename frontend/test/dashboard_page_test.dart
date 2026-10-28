@@ -98,9 +98,9 @@ void main() {
   });
 
   testWidgets('try again refreshes dashboard and attendance', (tester) async {
-    await pumpDashboard(tester, const DashboardError('Could not load dashboard.'));
+    await pumpDashboard(tester, const DashboardError(DashboardCubit.noSavedProfileMessage));
 
-    expect(find.text('Could not load dashboard.'), findsOneWidget);
+    expect(find.text(DashboardCubit.noSavedProfileMessage), findsOneWidget);
     await tester.tap(find.text('Try again'));
     await tester.pump();
 

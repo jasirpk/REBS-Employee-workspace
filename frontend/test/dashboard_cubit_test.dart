@@ -111,7 +111,7 @@ void main() {
       cubit.stream,
       emitsInOrder([
         const DashboardLoading(),
-        const DashboardError('Could not load dashboard. Check your connection and try again.'),
+        const DashboardError(DashboardCubit.noSavedProfileMessage),
       ]),
     );
 

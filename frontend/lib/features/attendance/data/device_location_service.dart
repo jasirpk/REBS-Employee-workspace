@@ -1,4 +1,6 @@
 
+import 'dart:async';
+
 import 'package:geolocator/geolocator.dart';
 
 import '../domain/attendance_location.dart';
@@ -25,12 +27,19 @@ class DeviceLocationService {
       throw const LocationPermissionPermanentlyDeniedException();
     }
 
-    final position = await Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        timeLimit: Duration(seconds: 15),
-      ),
-    );
+    final Position position;
+
+    try {
+      position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 15),
+        ),
+      );
+    } on TimeoutException {
+      // No GPS fix in time, e.g. indoors. This is not a network failure.
+      throw const LocationUnavailableException();
+    }
 
     return AttendanceLocation(
       latitude: position.latitude,
@@ -52,6 +61,13 @@ class LocationPermissionDeniedException implements Exception {
 
   @override
   String toString() => 'Location permission was denied.';
+}
+
+class LocationUnavailableException implements Exception {
+  const LocationUnavailableException();
+
+  @override
+  String toString() => 'Could not get your location. Move to an open area and try again.';
 }
 
 class LocationPermissionPermanentlyDeniedException implements Exception {

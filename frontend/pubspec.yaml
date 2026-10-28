@@ -57,6 +57,7 @@ dev_dependencies:
   bloc_test: ^10.0.0
   mocktail: ^1.0.5
   sqflite_common_ffi: 2.4.0+3
+  flutter_native_splash: ^2.4.7
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -99,3 +100,19 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# Native splash, generated with: fvm dart run flutter_native_splash:create
+# Background-only: the project has no logo asset, and the package cannot
+# render text, so the app name is not shown.
+flutter_native_splash:
+  # Brand colour, the seedColor in lib/main.dart.
+  color: "#3157A4"
+  # With no image, the generator writes an opaque black 1x1 iOS LaunchImage
+  # that shows as a centre dot. This fully transparent 4x4 placeholder (not a
+  # logo) is used instead; it only affects iOS.
+  image_ios: assets/splash/ios_launch_placeholder.png
+  android: true
+  ios: true
+  web: false
+  android_12:
+    color: "#3157A4"

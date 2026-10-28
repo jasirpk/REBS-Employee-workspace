@@ -1,10 +1,15 @@
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../data/dashboard_repository.dart';
 import 'dashboard_state.dart';
 
 class DashboardCubit extends Cubit<DashboardState> {
+  static const String noSavedProfileMessage =
+      'No saved employee profile is available yet. Connect to the internet once to download your profile '
+      'and office location. After that, you can use attendance offline.';
+
   final DashboardRepository _repository;
 
   DashboardCubit(this._repository) : super(const DashboardInitial());
@@ -30,16 +35,16 @@ class DashboardCubit extends Cubit<DashboardState> {
           sickBalance: (balance['sick'] as num).toInt(),
         ),
       );
-    } catch (_) {
+    } catch (error) {
+      // DIAGNOSTIC LOGGING: remove once the release network issue is verified.
+      debugPrint('[diagnostic] Dashboard load failed: $error');
+
       // Read the cache again: one of the requests may have just updated it.
       final latestCache = await _loadCachedDashboard(isRefreshing: false);
 
-      emit(
-        latestCache ??
-            const DashboardError(
-              'Could not load dashboard. Check your connection and try again.',
-            ),
-      );
+      // With a cache the dashboard stays usable offline. Without one there is
+      // no employee profile or office location yet, so attendance cannot run.
+      emit(latestCache ?? const DashboardError(noSavedProfileMessage));
     }
   }
 
