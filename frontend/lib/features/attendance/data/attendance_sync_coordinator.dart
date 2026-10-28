@@ -24,7 +24,22 @@ class AttendanceSyncCoordinator {
       final pendingEvents = await _localDataSource.getPendingEvents();
 
       for (final event in pendingEvents) {
-        await _syncSingleEvent(event);
+        // Reload the current state because an earlier event may have
+        // changed this event's status (for example, rejected its checkout).
+        final currentEvents = await _localDataSource.getEventsForDate(
+          event.companyDate,
+        );
+
+        final currentEvent = currentEvents
+            .where((item) => item.eventId == event.eventId)
+            .firstOrNull;
+
+        if (currentEvent == null ||
+            currentEvent.status != AttendanceSyncStatus.pending) {
+          continue;
+        }
+
+        await _syncSingleEvent(currentEvent);
       }
     } finally {
       _isSyncing = false;

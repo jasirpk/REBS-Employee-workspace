@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:frontend/core/database/app_database.dart';
-import 'package:frontend/features/attendance/data/attendance_local_data_source.dart';
 import 'package:frontend/features/attendance/domain/attendance_event.dart';
 
 void main() {
