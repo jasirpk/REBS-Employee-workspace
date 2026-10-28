@@ -100,8 +100,10 @@ const employee = {
   name: "Alex Johnson",
   department: "Engineering",
   office: {
-    latitude: 12.9716,
-    longitude: 77.5946,
+//     latitude: 12.9716,
+    latitude: 11.190723,
+//     longitude: 77.5946,
+    longitude: 75.950761,
     radiusMeters: 200
   },
   timezone: "Asia/Kolkata"

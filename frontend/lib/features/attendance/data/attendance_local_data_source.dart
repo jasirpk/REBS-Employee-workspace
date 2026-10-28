@@ -1,4 +1,3 @@
-
 import 'package:sqflite/sqflite.dart';
 
 import '../../../core/database/app_database.dart';
@@ -12,20 +11,13 @@ class AttendanceLocalDataSource {
   Future<int> saveEvent(AttendanceEvent event) async {
     final db = await _appDatabase.database;
 
-    return db.insert(
-      'attendance_events',
-      event.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.abort,
-    );
+    return db.insert('attendance_events', event.toMap(), conflictAlgorithm: ConflictAlgorithm.abort);
   }
 
   Future<List<AttendanceEvent>> getAllEvents() async {
     final db = await _appDatabase.database;
 
-    final rows = await db.query(
-      'attendance_events',
-      orderBy: 'local_id ASC',
-    );
+    final rows = await db.query('attendance_events', orderBy: 'local_id ASC');
 
     return rows.map(AttendanceEvent.fromMap).toList();
   }
@@ -33,36 +25,20 @@ class AttendanceLocalDataSource {
   Future<List<AttendanceEvent>> getPendingEvents() async {
     final db = await _appDatabase.database;
 
-    final rows = await db.query(
-      'attendance_events',
-      where: 'status = ?',
-      whereArgs: ['PENDING'],
-      orderBy: 'local_id ASC',
-    );
+    final rows = await db.query('attendance_events', where: 'status = ?', whereArgs: ['PENDING'], orderBy: 'local_id ASC');
 
     return rows.map(AttendanceEvent.fromMap).toList();
   }
 
-  Future<List<AttendanceEvent>> getEventsForDate(
-      String companyDate,
-      ) async {
+  Future<List<AttendanceEvent>> getEventsForDate(String companyDate) async {
     final db = await _appDatabase.database;
 
-    final rows = await db.query(
-      'attendance_events',
-      where: 'company_date = ?',
-      whereArgs: [companyDate],
-      orderBy: 'local_id ASC',
-    );
+    final rows = await db.query('attendance_events', where: 'company_date = ?', whereArgs: [companyDate], orderBy: 'local_id ASC');
 
     return rows.map(AttendanceEvent.fromMap).toList();
   }
 
-  Future<void> updateSyncStatus({
-    required String eventId,
-    required AttendanceSyncStatus status,
-    String? rejectReason,
-  }) async {
+  Future<void> updateSyncStatus({required String eventId, required AttendanceSyncStatus status, String? rejectReason}) async {
     final db = await _appDatabase.database;
 
     final updated = await db.update(
@@ -82,6 +58,38 @@ class AttendanceLocalDataSource {
     if (updated == 0) {
       throw StateError('Attendance event not found: $eventId');
     }
+  }
+
+  // Imports events the server has accepted. Matching is by event_id, and
+  // the import only adds rows or promotes PENDING ones; it never deletes.
+  Future<void> importSyncedEvents(List<AttendanceEvent> events) async {
+    final db = await _appDatabase.database;
+
+    await db.transaction((txn) async {
+      for (final event in events) {
+        final existing = await txn.query('attendance_events', columns: ['status'], where: 'event_id = ?', whereArgs: [event.eventId], limit: 1);
+
+        if (existing.isEmpty) {
+          // A different non-rejected local event for the same
+          // employee/date/type (e.g. an unsynced PENDING check-in) blocks
+          // this row via the partial unique index. Skip it rather than
+          // overwrite local data; a later import can add it once the
+          // local event is resolved.
+          await txn.insert('attendance_events', {
+            ...event.toMap(),
+            'status': 'SYNCED',
+            'reject_reason': null,
+          }, conflictAlgorithm: ConflictAlgorithm.ignore);
+          continue;
+        }
+
+        // SYNCED rows are already current, and REJECTED rows are left
+        // as recorded locally.
+        if (existing.first['status'] == 'PENDING') {
+          await txn.update('attendance_events', {'status': 'SYNCED', 'reject_reason': null}, where: 'event_id = ?', whereArgs: [event.eventId]);
+        }
+      }
+    });
   }
 
   Future<void> recordSyncAttempt(String eventId) async {

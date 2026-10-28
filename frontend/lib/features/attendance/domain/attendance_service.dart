@@ -32,7 +32,8 @@ class AttendanceService {
     required AttendanceEventType type,
     required String companyDate,
     required OfficeLocation office,
-  }) async {
+  }) async
+  {
     final todayEvents =
     await _localDataSource.getEventsForDate(companyDate);
 

@@ -9,7 +9,9 @@ class AppDatabase {
   final Future<Database> Function()? _databaseOpener;
 
   static const String _databaseName = 'rebs_employee_workspace.db';
-  static const int _databaseVersion = 1;
+  // Version 2 adds the leave_requests cache table.
+  // Version 3 adds the dashboard_cache table.
+  static const int _databaseVersion = 3;
 
   Database? _database;
 
@@ -30,14 +32,24 @@ class AppDatabase {
       path,
       version: _databaseVersion,
       onCreate: (db, version) async {
-        await _createTables(db);
+        await createTables(db);
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        // Only add new tables; existing attendance data is left untouched.
+        if (oldVersion < 2) {
+          await _createLeaveRequestsTable(db);
+        }
+        if (oldVersion < 3) {
+          await _createDashboardCacheTable(db);
+        }
       },
     );
 
     return _database!;
   }
 
-  Future<void> _createTables(Database db) async {
+  // Public so tests can build the same schema in an in-memory database.
+  static Future<void> createTables(Database db) async {
     await db.execute('''
     CREATE TABLE attendance_events (
       local_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,6 +74,38 @@ class AppDatabase {
     CREATE UNIQUE INDEX unique_active_daily_attendance
     ON attendance_events (employee_id, company_date, type)
     WHERE status != 'REJECTED'
+  ''');
+
+    await _createLeaveRequestsTable(db);
+    await _createDashboardCacheTable(db);
+  }
+
+  // Raw JSON of the last successful dashboard responses, by key.
+  static Future<void> _createDashboardCacheTable(Database db) async {
+    await db.execute('''
+    CREATE TABLE dashboard_cache (
+      key TEXT PRIMARY KEY,
+      response_json TEXT NOT NULL,
+      saved_at TEXT NOT NULL
+    )
+  ''');
+  }
+
+  static Future<void> _createLeaveRequestsTable(Database db) async {
+    await db.execute('''
+    CREATE TABLE leave_requests (
+      id TEXT PRIMARY KEY,
+      employee_id TEXT NOT NULL,
+      type TEXT NOT NULL
+        CHECK (type IN ('CASUAL', 'SICK')),
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      days INTEGER NOT NULL,
+      reason TEXT NOT NULL,
+      status TEXT NOT NULL
+        CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED')),
+      created_at TEXT NOT NULL
+    )
   ''');
   }
 
