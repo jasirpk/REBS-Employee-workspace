@@ -9,7 +9,7 @@
 		<key>NSLocationWhenInUseUsageDescription</key>
 		<string>Your location is used to verify that attendance actions are performed within the office geofence.</string>
 		<key>CFBundleDisplayName</key>
-		<string>Frontend</string>
+		<string>Workspace</string>
 		<key>CFBundleExecutable</key>
 		<string>$(EXECUTABLE_NAME)</string>
 		<key>CFBundleIdentifier</key>
