@@ -1,0 +1,6 @@
+# macOS
+.DS_Store
+
+# JetBrains IDE files for the repository root
+.idea/
+*.iml
