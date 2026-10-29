@@ -135,7 +135,8 @@ void main() {
         casualBalance: 5,
         sickBalance: 2,
         isFromCache: true,
-        savedAt: DateTime(2026, 10, 28, 9, 30),
+        // 04:00 UTC is 09:30 company time (UTC+05:30) on any device.
+        savedAt: DateTime.utc(2026, 10, 28, 4, 0),
       ),
     );
 
@@ -169,7 +170,8 @@ void main() {
         casualBalance: 5,
         sickBalance: 2,
         isFromCache: true,
-        savedAt: DateTime(2026, 10, 28, 9, 30),
+        // 04:00 UTC is 09:30 company time (UTC+05:30) on any device.
+        savedAt: DateTime.utc(2026, 10, 28, 4, 0),
         isRefreshing: true,
       ),
     );
@@ -221,6 +223,34 @@ void main() {
       expect(find.text('Synced'), findsOneWidget);
       expect(find.text('Pending Sync'), findsOneWidget);
       expect(find.text('Rejected'), findsOneWidget);
+    });
+
+    testWidgets('the attendance card and history show the same company time', (tester) async {
+      // 19:09:21Z is 12:39 AM on 29 Oct in company time (UTC+05:30),
+      // whatever timezone the test machine uses.
+      final checkIn = AttendanceEvent(
+        eventId: 'after-midnight',
+        employeeId: 'EMP001',
+        type: AttendanceEventType.checkIn,
+        occurredAt: DateTime.utc(2026, 10, 28, 19, 9, 21),
+        companyDate: '2026-10-29',
+        latitude: 11.190723,
+        longitude: 75.950761,
+        accuracyMeters: 10,
+        status: AttendanceSyncStatus.synced,
+      );
+      whenListen(
+        attendanceCubit,
+        const Stream<AttendanceState>.empty(),
+        initialState: AttendanceState(events: [checkIn], recentEvents: [checkIn]),
+      );
+
+      await pumpDashboard(tester, loadedState);
+      expect(find.text('Check-in: 12:39 AM'), findsOneWidget);
+
+      await scrollToRecentAttendance(tester);
+      await tester.scrollUntilVisible(find.text('Thu, 29 Oct 2026 · 12:39 AM'), 100, scrollable: find.byType(Scrollable).first);
+      expect(find.text('Thu, 29 Oct 2026 · 12:39 AM'), findsOneWidget);
     });
 
     testWidgets('shows an empty state when there is no history', (tester) async {

@@ -1,6 +1,7 @@
 
 import 'package:uuid/uuid.dart';
 
+import '../../../core/time/company_clock.dart';
 import '../data/attendance_local_data_source.dart';
 import '../data/device_location_service.dart';
 import 'attendance_event.dart';
@@ -14,6 +15,8 @@ class AttendanceService {
   final AttendancePolicy _attendancePolicy;
   final GeofencePolicy _geofencePolicy;
   final Uuid _uuid;
+  // Injectable so tests can move time across midnight during the GPS wait.
+  final DateTime Function() _clock;
 
   AttendanceService({
     required AttendanceLocalDataSource localDataSource,
@@ -21,30 +24,23 @@ class AttendanceService {
     AttendancePolicy attendancePolicy = const AttendancePolicy(),
     GeofencePolicy geofencePolicy = const GeofencePolicy(),
     Uuid uuid = const Uuid(),
+    DateTime Function() clock = DateTime.now,
   })  : _localDataSource = localDataSource,
         _locationService = locationService,
         _attendancePolicy = attendancePolicy,
         _geofencePolicy = geofencePolicy,
-        _uuid = uuid;
+        _uuid = uuid,
+        _clock = clock;
 
   Future<AttendanceEvent> recordAttendance({
     required String employeeId,
     required AttendanceEventType type,
-    required String companyDate,
     required OfficeLocation office,
   }) async
   {
-    final todayEvents =
-    await _localDataSource.getEventsForDate(companyDate);
-
-    final validationMessage = _attendancePolicy.validateAction(
-      requestedType: type,
-      todayEvents: todayEvents,
-    );
-
-    if (validationMessage != null) {
-      throw AttendanceValidationException(validationMessage);
-    }
+    // Checked before the GPS wait so a repeated tap fails straight away.
+    final dateBeforeLocation = CompanyClock.today(now: _clock());
+    await _validateAction(type, dateBeforeLocation);
 
     final location = await _locationService.getCurrentLocation();
 
@@ -65,11 +61,21 @@ class AttendanceService {
       );
     }
 
+    // The event's time and company date come from one instant, taken after
+    // the GPS fix, so a fix that arrives after midnight is dated the new day.
+    // The server derives the date from occurredAt the same way.
+    final occurredAt = _clock().toUtc();
+    final companyDate = CompanyClock.dateOf(occurredAt);
+
+    if (companyDate != dateBeforeLocation) {
+      await _validateAction(type, companyDate);
+    }
+
     final event = AttendanceEvent(
       eventId: _uuid.v4(),
       employeeId: employeeId,
       type: type,
-      occurredAt: DateTime.now().toUtc(),
+      occurredAt: occurredAt,
       companyDate: companyDate,
       latitude: location.latitude,
       longitude: location.longitude,
@@ -91,6 +97,19 @@ class AttendanceService {
       accuracyMeters: event.accuracyMeters,
       status: event.status,
     );
+  }
+
+  Future<void> _validateAction(AttendanceEventType type, String companyDate) async {
+    final dayEvents = await _localDataSource.getEventsForDate(companyDate);
+
+    final validationMessage = _attendancePolicy.validateAction(
+      requestedType: type,
+      todayEvents: dayEvents,
+    );
+
+    if (validationMessage != null) {
+      throw AttendanceValidationException(validationMessage);
+    }
   }
 }
 

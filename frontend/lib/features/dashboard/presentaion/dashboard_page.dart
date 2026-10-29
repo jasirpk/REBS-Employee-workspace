@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/time/company_clock.dart';
 import '../../attendance/domain/attendance_event.dart';
 import '../../attendance/domain/office_location.dart';
 import '../../attendance/presentation/attendance_cubit.dart';
@@ -127,7 +128,7 @@ class _DashboardContent extends StatelessWidget {
                     const Icon(Icons.cloud_off),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: Text('Offline. Showing data saved on ${DateFormat('d MMM, hh:mm a').format(offlineSavedAt!.toLocal())}.'),
+                      child: Text('Offline. Showing data saved on ${CompanyClock.format(offlineSavedAt!, 'd MMM, hh:mm a')}.'),
                     ),
                     TextButton(
                       onPressed: () => _refreshDashboardAndAttendance(context),
@@ -213,7 +214,7 @@ class _AttendanceCard extends StatelessWidget {
 
   String _formatTime(DateTime? time) {
     if (time == null) return '--:--';
-    return DateFormat('hh:mm a').format(time.toLocal());
+    return CompanyClock.format(time, 'hh:mm a');
   }
 
   @override
@@ -399,7 +400,7 @@ class _RecentAttendanceRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final isCheckIn = event.type == AttendanceEventType.checkIn;
     final date = DateFormat('EEE, d MMM yyyy').format(DateTime.parse(event.companyDate));
-    final time = DateFormat('hh:mm a').format(event.occurredAt.toLocal());
+    final time = CompanyClock.format(event.occurredAt, 'hh:mm a');
 
     return ListTile(
       leading: Icon(isCheckIn ? Icons.login : Icons.logout),

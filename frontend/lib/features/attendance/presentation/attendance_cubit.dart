@@ -103,7 +103,8 @@ class AttendanceCubit extends Cubit<AttendanceState> {
 
 
     try {
-      final savedEvent = await _attendanceService.recordAttendance(employeeId: employeeId, type: type, companyDate: CompanyClock.today(), office: office);
+      // The service dates the event from its own timestamp, after the GPS fix.
+      final savedEvent = await _attendanceService.recordAttendance(employeeId: employeeId, type: type, office: office);
 
       // A transient sync failure must not undo the locally saved event;
       // it simply stays PENDING and is reported below.

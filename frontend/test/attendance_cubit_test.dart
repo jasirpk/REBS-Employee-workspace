@@ -49,7 +49,6 @@ void main() {
       () => attendanceService.recordAttendance(
         employeeId: any(named: 'employeeId'),
         type: any(named: 'type'),
-        companyDate: any(named: 'companyDate'),
         office: any(named: 'office'),
       ),
     ).thenAnswer((_) async {
