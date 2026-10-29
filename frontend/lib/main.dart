@@ -2,6 +2,7 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'core/config/api_config.dart';
 import 'core/config/configuration_error_app.dart';
 import 'core/database/app_database.dart';
@@ -19,8 +20,17 @@ import 'features/leave/data/leave_local_data_source.dart';
 import 'features/leave/data/leave_repository.dart';
 import 'features/leave/presentation/leave_cubit.dart';
 
-void main() {
-  // message instead of starting the app with an unusable address.
+void main() async{
+  // frontend/.env is bundled as an asset (pubspec.yaml) and read here, before
+  // the API client is created. If it is empty or unreadable, API_BASE_URL is
+  // empty and the configuration error screen explains the fix, instead of the
+  // app crashing at start-up.
+  try {
+    await dotenv.load(fileName: ".env");
+  } catch (error) {
+    debugPrint('Could not load .env: $error');
+  }
+
   final apiConfigError = ApiConfig.validateBaseUrl(ApiConfig.baseUrl);
   if (apiConfigError != null) {
     runApp(ConfigurationErrorApp(message: apiConfigError));

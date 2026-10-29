@@ -46,7 +46,7 @@ free of data access and makes each feature testable with plain unit tests.
 ```
 frontend/lib/
   core/
-    config/api_config.dart         API_BASE_URL (compiled in from frontend/.env) + validation
+    config/api_config.dart         API_BASE_URL from frontend/.env (flutter_dotenv) + validation
     database/app_database.dart     SQLite (sqflite), schema version 3 + migrations
     network/api_client.dart        Dio client (10 s connect/receive timeouts)
     time/company_clock.dart        company date/time from COMPANY_UTC_OFFSET_MINUTES
@@ -106,48 +106,56 @@ connections for `node`.
 
 ```bash
 cd frontend
-cp .env.example .env      # first time only; then set API_BASE_URL (see below)
+cp .env.example .env      # required after cloning; then set API_BASE_URL (see below)
 fvm flutter pub get
-fvm flutter run --dart-define-from-file=.env
+fvm flutter run
 ```
 
-### Build-time configuration (`frontend/.env`)
+### API address (`frontend/.env`)
 
-The API address lives in `frontend/.env`. That file is git-ignored; the
-committed template is `frontend/.env.example`. Example:
+The app reads the mock API address from `frontend/.env`, in normal `.env`
+syntax (`#` starts a comment):
 
 ```dotenv
 API_BASE_URL=http://192.168.1.2:3000/api/
 ```
 
-**How it is loaded.** Flutter does not read `.env` files at runtime. The
-Flutter tool reads the file at **build time** through
-`--dart-define-from-file=.env`, and the value is compiled into the app, where
-`ApiConfig.baseUrl` reads it with `String.fromEnvironment('API_BASE_URL')`.
-The `.env` file itself is not packaged into the APK. No package is needed.
-Pass the flag to every `run` and `build`, and rebuild after editing `.env`.
-In Android Studio or VS Code, add `--dart-define-from-file=.env` to the run
-configuration's additional arguments.
+- **Create it after cloning.** `frontend/.env` is git-ignored, so it is not
+  in the repository; copy it from the committed template
+  `frontend/.env.example`. The build fails with *"No file or variants found
+  for asset: .env"* if the file does not exist, because `pubspec.yaml`
+  declares it as an asset.
+- **Use an address the device can reach.** `192.168.1.2` is only an example.
+  `localhost` means the device or emulator itself in most contexts, not the
+  Mac, so choose by target:
 
-If `API_BASE_URL` is missing, empty, not an `http(s)` URL, or lacks the
-trailing `/`, the app starts with an **"App configuration error"** screen
-explaining what to fix. It does not fall back to a guessed address.
-
-| Name | Default | Notes |
+| Target | `API_BASE_URL` | Verified |
 |---|---|---|
-| `API_BASE_URL` | none (required) | Mock API base URL, ending with `/api/`. Set it in `frontend/.env`. |
-| `COMPANY_UTC_OFFSET_MINUTES` | `330` (UTC+05:30) | Optional. Company timezone as a fixed offset from UTC; see [Company timezone](#company-timezone). Can go in `.env` too. |
+| iOS Simulator | `http://localhost:3000/api/` (the simulator shares the Mac's network) | Used during development |
+| Android physical phone | `http://<Mac LAN IP>:3000/api/` (find it with `ipconfig getifaddr en0`; same Wi-Fi as the Mac) | Used during development |
+| Android Emulator | `http://10.0.2.2:3000/api/` (the emulator's alias for the Mac) | Not verified here |
 
-A `--dart-define=NAME=value` flag still works and overrides the same key from
-`.env`.
+**How it is loaded.** The `flutter_dotenv` package reads `.env` at app start
+(`dotenv.load()` in `main.dart`), before the API client is created, and
+`ApiConfig.baseUrl` takes `API_BASE_URL` from it. The file is declared under
+`flutter: assets:` in `pubspec.yaml`, so it is **bundled into the app as an
+asset**. In a built APK it is the plain-text file
+`assets/flutter_assets/.env`, and anyone with the APK can read it. Put
+configuration there, never secrets. Edits take effect after a rebuild; no
+extra build flags are needed.
 
-`API_BASE_URL` by target:
+If `API_BASE_URL` is missing or empty, is not an `http(s)` URL, contains an
+unreplaced placeholder such as `<Mac LAN IP>`, or lacks the trailing `/`, the
+app opens an **"App configuration error"** screen explaining what to fix,
+rather than guessing an address.
 
-| Target | Value | Verified |
-|---|---|---|
-| iOS Simulator | `http://localhost:3000/api/` | Used during development |
-| Android physical phone | `http://<Mac LAN IP>:3000/api/` (find it with `ipconfig getifaddr en0`) | Used during development |
-| Android Emulator | `http://10.0.2.2:3000/api/` (the emulator's alias for the host) | Not verified here |
+### Company timezone offset
+
+`COMPANY_UTC_OFFSET_MINUTES` is **not** read from `.env`. It is a build-time
+constant (`int.fromEnvironment`), default `330` (UTC+05:30). Override it with
+a flag, for example
+`fvm flutter run --dart-define=COMPANY_UTC_OFFSET_MINUTES=330`.
+See [Company timezone](#company-timezone).
 
 Android networking notes:
 - `android.permission.INTERNET` is declared in
@@ -164,16 +172,16 @@ Android networking notes:
 ```bash
 cd frontend
 # Debug APK (assignment deliverable)
-fvm flutter build apk --debug --dart-define-from-file=.env
+fvm flutter build apk --debug
 # -> build/app/outputs/flutter-apk/app-debug.apk
 
 # Release APK (signed with the debug key, from the Flutter template)
-fvm flutter build apk --release --dart-define-from-file=.env
+fvm flutter build apk --release
 # -> build/app/outputs/flutter-apk/app-release.apk
 ```
 
-The API URL is compiled in, so edit `.env` and rebuild when the Mac's IP
-changes.
+The APK contains the `.env` present at build time, so set `API_BASE_URL` for
+the target device first, and rebuild when the Mac's IP changes.
 
 ## Company timezone
 

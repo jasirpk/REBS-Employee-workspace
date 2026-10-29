@@ -44,6 +44,7 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
-# Local build configuration (see README). Only the template is committed.
+# Local configuration (see README). Only the template is committed.
 .env
 .env.*
+!.env.example

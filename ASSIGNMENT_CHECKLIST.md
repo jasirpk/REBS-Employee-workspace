@@ -95,7 +95,7 @@ changes.
 | Layers separated | Tested | `data/`, `domain/`, `presentation/` per feature |
 | Persistent storage | Tested | SQLite schema v3, migration tests |
 | No business logic in `build` | Partial | `_AttendanceCard.build` works out `canCheckIn` and `canCheckOut` from events. A small amount; could move to state getters. |
-| Reasonable dependencies | Tested | flutter_bloc, equatable, dio, sqflite, path, uuid, geolocator, connectivity_plus, intl; dev: bloc_test, mocktail, sqflite_common_ffi, flutter_native_splash |
+| Reasonable dependencies | Tested | flutter_bloc, equatable, dio, sqflite, path, uuid, geolocator, connectivity_plus, intl, flutter_dotenv (API address from `frontend/.env`); dev: bloc_test, mocktail, sqflite_common_ffi, flutter_native_splash |
 | Usable on different Android screen sizes | Developer to confirm | Scrolling layouts; not checked on several screen sizes |
 | No credentials or secrets | Tested | A keyword scan found none; the mock API has no authentication |
 

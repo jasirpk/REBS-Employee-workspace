@@ -1,3 +1,4 @@
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:frontend/core/config/api_config.dart';
@@ -16,7 +17,7 @@ void main() {
 
       expect(message, contains('API_BASE_URL is not set'));
       expect(message, contains('frontend/.env'));
-      expect(message, contains('--dart-define-from-file=.env'));
+      expect(message, contains('frontend/.env.example'));
       expect(ApiConfig.validateBaseUrl('   '), message);
     });
 
@@ -30,11 +31,29 @@ void main() {
       expect(ApiConfig.validateBaseUrl('http://192.168.1.2:3000/api'), contains('must end with "/"'));
     });
 
-    test('tests run without .env, so the compiled value is empty and rejected', () {
-      // `fvm flutter test` passes no --dart-define-from-file, which is the
-      // same situation as a build without frontend/.env.
+  });
+
+  group('ApiConfig.readBaseUrl', () {
+    test('returns API_BASE_URL from the loaded .env', () {
+      final env = DotEnv()..testLoad(fileInput: 'API_BASE_URL=http://192.168.1.2:3000/api/\n# API_BASE_URL=http://localhost:3000/api/');
+
+      expect(ApiConfig.readBaseUrl(env), 'http://192.168.1.2:3000/api/');
+    });
+
+    test('returns an empty value, not "null", when the key is missing', () {
+      final env = DotEnv()..testLoad(fileInput: 'OTHER_SETTING=1');
+
+      expect(ApiConfig.readBaseUrl(env), isEmpty);
+      expect(ApiConfig.validateBaseUrl(ApiConfig.readBaseUrl(env)), contains('API_BASE_URL is not set'));
+    });
+
+    test('returns an empty value when .env was never loaded', () {
+      expect(ApiConfig.readBaseUrl(DotEnv()), isEmpty);
+    });
+
+    test('is empty in unit tests, which never load .env', () {
+      // Tests construct ApiClient without loading .env; this must not throw.
       expect(ApiConfig.baseUrl, isEmpty);
-      expect(ApiConfig.validateBaseUrl(ApiConfig.baseUrl), isNotNull);
     });
   });
 
