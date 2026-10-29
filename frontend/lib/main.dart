@@ -2,6 +2,8 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'core/config/api_config.dart';
+import 'core/config/configuration_error_app.dart';
 import 'core/database/app_database.dart';
 import 'features/attendance/data/attendance_local_data_source.dart';
 import 'features/attendance/data/attendance_sync_coordinator.dart';
@@ -18,6 +20,13 @@ import 'features/leave/data/leave_repository.dart';
 import 'features/leave/presentation/leave_cubit.dart';
 
 void main() {
+  // message instead of starting the app with an unusable address.
+  final apiConfigError = ApiConfig.validateBaseUrl(ApiConfig.baseUrl);
+  if (apiConfigError != null) {
+    runApp(ConfigurationErrorApp(message: apiConfigError));
+    return;
+  }
+
   final apiClient = ApiClient();
   final appDatabase = AppDatabase();
   final attendanceLocalDataSource = AttendanceLocalDataSource(appDatabase);
@@ -55,8 +64,6 @@ void main() {
     ),
   );
 
-  // After runApp so plugins (SQLite, connectivity) are ready. This also
-  // loads today's attendance.
   attendanceCubit.startAutoSync();
 }
 

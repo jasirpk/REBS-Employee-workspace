@@ -1,17 +1,21 @@
-# frontend
+# REBS Employee Workspace (Flutter app)
 
-A new Flutter project.
+The Flutter app for the REBS Employee Workspace. See the
+[root README](../README.md) for setup, build-time configuration
+(`frontend/.env`: `API_BASE_URL`, `COMPANY_UTC_OFFSET_MINUTES`), architecture,
+offline sync, mock scenarios and known limitations.
 
-## Getting Started
+Quick reference, run from this folder:
 
-This project is a starting point for a Flutter application.
+```bash
+cp .env.example .env    # first time only; set API_BASE_URL for your machine
+fvm flutter pub get
+fvm flutter run --dart-define-from-file=.env
+fvm flutter build apk --debug --dart-define-from-file=.env
+fvm flutter analyze
+fvm flutter test        # needs no .env
+```
 
-A few resources to get you started if this is your first Flutter project:
-
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+`.env` is read by the Flutter tool at build time and compiled into the app;
+it is git-ignored and not packaged as a file. Without a valid `API_BASE_URL`
+the app shows an "App configuration error" screen.
